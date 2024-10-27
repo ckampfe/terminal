@@ -17,6 +17,7 @@ defmodule Terminal.MixProject do
       extra_applications:
         if Mix.env() == :prod do
           [:logger]
+          # [:logger, :runtime_tools, :observer, :wx]
         else
           [:logger, :runtime_tools, :observer, :wx]
         end,

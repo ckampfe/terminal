@@ -4,10 +4,34 @@ defmodule Terminal do
     crate: :terminal
 
   def new(_tick_rate, _mode), do: :erlang.nif_error(:nif_not_loaded)
+
+  @doc """
+  If this returns {:ok, true}, there is an event available, and you may call
+  read_event, and it will not block.
+
+  If it returns {:ok, false}, there is no event available, so calling read_event
+  *will block* the caller.
+  """
   def event_available?(_milliseconds), do: :erlang.nif_error(:nif_not_loaded)
   def read_event(), do: :erlang.nif_error(:nif_not_loaded)
   # def clear(_terminal), do: :erlang.nif_error(:nif_not_loaded)
   # def draw(_terminal, _s), do: :erlang.nif_error(:nif_not_loaded)
+  def new_block(), do: :erlang.nif_error(:nif_not_loaded)
+  def block_borders(_block), do: :erlang.nif_error(:nif_not_loaded)
+  def block_title(_block, _title), do: :erlang.nif_error(:nif_not_loaded)
+  def chunks(_terminal, _constraints), do: :erlang.nif_error(:nif_not_loaded)
+
+  def new_paragraph(_block, _text), do: :erlang.nif_error(:nif_not_loaded)
+
+  def render_paragraph(_terminal, _text, _chunks, _chunk_index),
+    do: :erlang.nif_error(:nif_not_loaded)
+
+  # def resize(_terminal, _width, _height), do: :erlang.nif_error(:nif_not_loaded)
+
+  # terminal: ResourceArc<TerminalResource>,
+  #   text: String,
+  #   chunks: ResourceArc<ChunksResource>,
+  #   index: usize,
 
   def draw(terminal, f) do
     :ok = try_draw(terminal, f)
@@ -15,48 +39,62 @@ defmodule Terminal do
   end
 
   def try_draw(terminal, f) do
-    statuses = []
-    statuses = [1 | statuses]
-    autoresize(terminal)
+    predraw(terminal)
 
-    statuses = [2 | statuses]
     f.(terminal)
 
-    statuses = [3 | statuses]
-    cursor_position = get_cursor_position(terminal)
+    postdraw(terminal)
 
-    statuses = [4 | statuses]
-    flush(terminal)
-
-    statuses = [5 | statuses]
-
-    statuses =
-      case cursor_position do
-        nil ->
-          statuses = [6 | statuses]
-          hide_cursor(terminal)
-          statuses
-
-        position ->
-          statuses = [7 | statuses]
-          show_cursor(terminal)
-          statuses = [8 | statuses]
-          set_cursor_position(terminal, position)
-          statuses
-      end
-
-    statuses = [9 | statuses]
-    swap_buffers(terminal)
-
-    statuses = [10 | statuses]
-    flush_backend(terminal)
-
-    IO.inspect(statuses)
-
-    # can't increment frame count it's a private api
-    # increment_frame_count(terminal)
     :ok
   end
+
+  def predraw(_terminal), do: :erlang.nif_error(:nif_not_loaded)
+  def postdraw(_terminal), do: :erlang.nif_error(:nif_not_loaded)
+
+  # def try_draw(terminal, f) do
+  #   # statuses = []
+  #   # statuses = [1 | statuses]
+  #   autoresize(terminal)
+
+  #   # statuses = [2 | statuses]
+  #   f.(terminal)
+
+  #   # statuses = [3 | statuses]
+  #   cursor_position = get_cursor_position(terminal)
+
+  #   # statuses = [4 | statuses]
+  #   flush(terminal)
+
+  #   # statuses = [5 | statuses]
+
+  #   # statuses =
+  #   case cursor_position do
+  #     nil ->
+  #       # statuses = [6 | statuses]
+  #       hide_cursor(terminal)
+
+  #     # statuses
+
+  #     position ->
+  #       # statuses = [7 | statuses]
+  #       show_cursor(terminal)
+  #       # statuses = [8 | statuses]
+  #       set_cursor_position(terminal, position)
+  #       # statuses
+  #   end
+
+  #   # statuses = [9 | statuses]
+  #   swap_buffers(terminal)
+
+  #   # statuses = [10 | statuses]
+  #   flush_backend(terminal)
+
+  #   # IO.inspect(statuses)
+
+  #   # can't increment frame count it's a private api
+  #   # increment_frame_count(terminal)
+  #   :ok
+  # end
 
   # pub fn try_draw<F, E>(&mut self, render_callback: F) -> io::Result<CompletedFrame>
   #   where

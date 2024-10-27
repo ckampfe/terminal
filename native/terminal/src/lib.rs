@@ -1,14 +1,12 @@
-use std::{collections::HashMap, sync::Mutex};
-
-use ratatui::{
-    layout::{Constraint, Direction, Layout},
-    prelude::{Backend, CrosstermBackend},
-    style::{Color, Modifier, Style},
-    text::{Span, Text},
-    widgets::{Block, Borders, Paragraph, Wrap},
-    Terminal,
-};
+use ratatui::layout::{Direction, Layout, Rect};
+use ratatui::prelude::{Backend, CrosstermBackend};
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::{Span, Text};
+use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
+use ratatui::Terminal;
 use rustler::{Decoder, Env, NifResult, Resource, ResourceArc, Term};
+use std::collections::HashMap;
+use std::sync::Mutex;
 
 mod atoms {
     rustler::atoms! {
@@ -39,12 +37,38 @@ mod atoms {
         none,
         char,
         enter,
+        delete,
+        backspace,
+        left,
+        right,
+        up,
+        down,
+        home,
+        insert,
+        end,
+        page_up,
+        page_down,
+        tab,
+        back_tab,
+        f,
+        null,
+        esc,
+        caps_lock,
+        scroll_lock,
+        print_screen,
+        num_lock,
+        pause,
+        menu,
+        begin,
+
 
         keycode,
         code,
         modifiers,
         kind,
         state,
+
+        percentage,
 
     }
 }
@@ -72,23 +96,11 @@ impl Resource for TerminalResource {
     fn down<'a>(&'a self, _env: Env<'a>, _pid: rustler::LocalPid, _monitor: rustler::Monitor) {}
 }
 
-// struct FrameResource<'a> {
-//     pub frame: Mutex<Frame<'a>>,
-// }
-
-// impl Resource for FrameResource<'static> {
-//     const IMPLEMENTS_DESTRUCTOR: bool = false;
-
-//     const IMPLEMENTS_DOWN: bool = false;
-
-//     // fn destructor(mut self, env: Env<'_>) {}
-
-//     fn down<'a>(&'a self, env: Env<'a>, pid: rustler::LocalPid, monitor: rustler::Monitor) {}
-// }
-
 fn load(env: Env, _: Term) -> bool {
-    // rustler::resource!(TerminalResource, env);
-    env.register::<TerminalResource>().is_ok()
+    env.register::<TerminalResource>().unwrap();
+    env.register::<ChunksResource>().unwrap();
+    env.register::<ParagraphResource>().unwrap();
+    true
 }
 
 macro_rules! nif_error {
@@ -117,7 +129,7 @@ impl Decoder<'_> for Mode {
     }
 }
 
-#[rustler::nif]
+#[rustler::nif(schedule = "DirtyIo")]
 fn new(
     env: rustler::Env,
     tick_rate: u64,
@@ -260,33 +272,45 @@ impl From<crossterm::event::KeyCode> for KeyCode {
 impl rustler::Encoder for KeyCode {
     fn encode<'a>(&self, env: Env<'a>) -> Term<'a> {
         match self.0 {
-            crossterm::event::KeyCode::Backspace => todo!(),
+            crossterm::event::KeyCode::Backspace => {
+                (atoms::keycode(), atoms::backspace()).encode(env)
+            }
             crossterm::event::KeyCode::Enter => (atoms::keycode(), atoms::enter()).encode(env),
-            crossterm::event::KeyCode::Left => todo!(),
-            crossterm::event::KeyCode::Right => todo!(),
-            crossterm::event::KeyCode::Up => todo!(),
-            crossterm::event::KeyCode::Down => todo!(),
-            crossterm::event::KeyCode::Home => todo!(),
-            crossterm::event::KeyCode::End => todo!(),
-            crossterm::event::KeyCode::PageUp => todo!(),
-            crossterm::event::KeyCode::PageDown => todo!(),
-            crossterm::event::KeyCode::Tab => todo!(),
-            crossterm::event::KeyCode::BackTab => todo!(),
-            crossterm::event::KeyCode::Delete => todo!(),
-            crossterm::event::KeyCode::Insert => todo!(),
-            crossterm::event::KeyCode::F(_) => todo!(),
+            crossterm::event::KeyCode::Left => (atoms::keycode(), atoms::left()).encode(env),
+            crossterm::event::KeyCode::Right => (atoms::keycode(), atoms::right()).encode(env),
+            crossterm::event::KeyCode::Up => (atoms::keycode(), atoms::up()).encode(env),
+            crossterm::event::KeyCode::Down => (atoms::keycode(), atoms::down()).encode(env),
+            crossterm::event::KeyCode::Home => (atoms::keycode(), atoms::home()).encode(env),
+            crossterm::event::KeyCode::End => (atoms::keycode(), atoms::end()).encode(env),
+            crossterm::event::KeyCode::PageUp => (atoms::keycode(), atoms::page_up()).encode(env),
+            crossterm::event::KeyCode::PageDown => {
+                (atoms::keycode(), atoms::page_down()).encode(env)
+            }
+            crossterm::event::KeyCode::Tab => (atoms::keycode(), atoms::tab()).encode(env),
+            crossterm::event::KeyCode::BackTab => (atoms::keycode(), atoms::back_tab()).encode(env),
+            crossterm::event::KeyCode::Delete => (atoms::keycode(), atoms::delete()).encode(env),
+            crossterm::event::KeyCode::Insert => (atoms::keycode(), atoms::insert()).encode(env),
+            crossterm::event::KeyCode::F(f) => (atoms::keycode(), (atoms::f(), f)).encode(env),
             crossterm::event::KeyCode::Char(c) => {
                 (atoms::keycode(), (atoms::char(), c.to_string())).encode(env)
             }
-            crossterm::event::KeyCode::Null => todo!(),
-            crossterm::event::KeyCode::Esc => todo!(),
-            crossterm::event::KeyCode::CapsLock => todo!(),
-            crossterm::event::KeyCode::ScrollLock => todo!(),
-            crossterm::event::KeyCode::NumLock => todo!(),
-            crossterm::event::KeyCode::PrintScreen => todo!(),
-            crossterm::event::KeyCode::Pause => todo!(),
-            crossterm::event::KeyCode::Menu => todo!(),
-            crossterm::event::KeyCode::KeypadBegin => todo!(),
+            crossterm::event::KeyCode::Null => (atoms::keycode(), atoms::null()).encode(env),
+            crossterm::event::KeyCode::Esc => (atoms::keycode(), atoms::esc()).encode(env),
+            crossterm::event::KeyCode::CapsLock => {
+                (atoms::keycode(), atoms::caps_lock()).encode(env)
+            }
+            crossterm::event::KeyCode::ScrollLock => {
+                (atoms::keycode(), atoms::scroll_lock()).encode(env)
+            }
+            crossterm::event::KeyCode::NumLock => (atoms::keycode(), atoms::num_lock()).encode(env),
+            crossterm::event::KeyCode::PrintScreen => {
+                (atoms::keycode(), atoms::print_screen()).encode(env)
+            }
+            crossterm::event::KeyCode::Pause => (atoms::keycode(), atoms::pause()).encode(env),
+            crossterm::event::KeyCode::Menu => (atoms::keycode(), atoms::menu()).encode(env),
+            crossterm::event::KeyCode::KeypadBegin => {
+                (atoms::keycode(), atoms::begin()).encode(env)
+            }
             crossterm::event::KeyCode::Media(_media_key_code) => todo!(),
             crossterm::event::KeyCode::Modifier(_modifier_key_code) => todo!(),
         }
@@ -303,28 +327,26 @@ impl From<crossterm::event::KeyModifiers> for KeyModifiers {
 
 impl rustler::Encoder for KeyModifiers {
     fn encode<'a>(&self, env: Env<'a>) -> Term<'a> {
-        // let x = self.0.to_string();
-        // match self.0 {
-        //     // const CONTROL = 0b0000_0010;
-        //     crossterm::event::KeyModifiers::CONTROL => atoms::control().to_term(env),
-        //     // const SHIFT = 0b0000_0001;
-        //     crossterm::event::KeyModifiers::SHIFT => atoms::shift().to_term(env),
-        //     // const ALT = 0b0000_0100;
-        //     crossterm::event::KeyModifiers::ALT => atoms::alt().to_term(env),
-        //     // const SUPER = 0b0000_1000;
-        //     crossterm::event::KeyModifiers::SUPER => {
-        //         rustler::Atom::from_str(env, "super").unwrap().to_term(env)
-        //     }
-        //     // const HYPER = 0b0001_0000;
-        //     crossterm::event::KeyModifiers::HYPER => atoms::hyper().to_term(env),
-        //     // const META = 0b0010_0000;
-        //     crossterm::event::KeyModifiers::META => atoms::meta().to_term(env),
-        //     // const NONE = 0b0000_0000;
-        //     crossterm::event::KeyModifiers::NONE => atoms::none().to_term(env),
-        //     _ => todo!(),
-        // }
-        // self.0.bits().encode(env)
-        self.0.to_string().encode(env)
+        match self.0 {
+            // const CONTROL = 0b0000_0010;
+            crossterm::event::KeyModifiers::CONTROL => atoms::control().to_term(env),
+            // const SHIFT = 0b0000_0001;
+            crossterm::event::KeyModifiers::SHIFT => atoms::shift().to_term(env),
+            // const ALT = 0b0000_0100;
+            crossterm::event::KeyModifiers::ALT => atoms::alt().to_term(env),
+            // const SUPER = 0b0000_1000;
+            crossterm::event::KeyModifiers::SUPER => {
+                // super is already a rust keyword so we have to do it this way
+                rustler::Atom::from_str(env, "super").unwrap().to_term(env)
+            }
+            // const HYPER = 0b0001_0000;
+            crossterm::event::KeyModifiers::HYPER => atoms::hyper().to_term(env),
+            // const META = 0b0010_0000;
+            crossterm::event::KeyModifiers::META => atoms::meta().to_term(env),
+            // const NONE = 0b0000_0000;
+            crossterm::event::KeyModifiers::NONE => atoms::none().to_term(env),
+            _ => todo!(),
+        }
     }
 }
 
@@ -366,12 +388,164 @@ fn read_event() -> NifResult<(rustler::Atom, (rustler::Atom, Event))> {
     Ok((atoms::ok(), (atoms::event(), event.into())))
 }
 
+struct Constraint(ratatui::layout::Constraint);
+
+impl<'a> rustler::Decoder<'a> for Constraint {
+    fn decode(term: Term<'a>) -> NifResult<Self> {
+        let constraint: (rustler::Atom, u16) = term.decode()?;
+
+        if constraint.0 == atoms::percentage() {
+            Ok(Constraint(ratatui::layout::Constraint::Percentage(
+                constraint.1,
+            )))
+        } else {
+            Err(nif_error!("something bad"))
+        }
+    }
+}
+
+struct BlockResource<'a>(Mutex<Option<ratatui::widgets::Block<'a>>>);
+
+impl Resource for BlockResource<'static> {
+    const IMPLEMENTS_DESTRUCTOR: bool = false;
+    const IMPLEMENTS_DOWN: bool = false;
+}
+
+#[rustler::nif(schedule = "DirtyIo")]
+fn new_block() -> ResourceArc<BlockResource<'static>> {
+    ResourceArc::new(BlockResource(Mutex::new(Some(
+        ratatui::widgets::Block::default(),
+    ))))
+}
+
+#[rustler::nif(schedule = "DirtyIo")]
+fn block_borders(
+    block: ResourceArc<BlockResource<'static>>,
+) -> ResourceArc<BlockResource<'static>> {
+    {
+        let mut lock = block
+            .0
+            .lock()
+            .expect("must be able to take in blockborders");
+        let inner = lock.take().unwrap();
+        *lock = Some(inner.borders(Borders::ALL))
+    }
+
+    block
+}
+
+#[rustler::nif(schedule = "DirtyIo")]
+fn block_title(
+    block: ResourceArc<BlockResource<'static>>,
+    title: &str,
+) -> ResourceArc<BlockResource<'static>> {
+    {
+        let mut lock = block.0.lock().unwrap();
+        let inner = lock.take().expect("must be able to take in blocktitle");
+        *lock = Some(
+            inner.title(Span::styled(
+                title.to_owned(),
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )),
+        )
+    }
+
+    block
+}
+
+struct ParagraphResource<'a>(ratatui::widgets::Paragraph<'a>);
+
+impl<'a: 'static> Resource for ParagraphResource<'a> {
+    const IMPLEMENTS_DESTRUCTOR: bool = false;
+
+    const IMPLEMENTS_DOWN: bool = false;
+
+    // fn destructor(self, _env: Env<'_>) {}
+
+    // fn down<'a>(&'a self, env: Env<'a>, pid: rustler::LocalPid, monitor: rustler::Monitor) {}
+}
+
+#[rustler::nif(schedule = "DirtyIo")]
+fn new_paragraph(
+    block: ResourceArc<BlockResource<'static>>,
+    text: String,
+) -> ResourceArc<ParagraphResource<'_>> {
+    let mut block = block.0.lock().unwrap();
+
+    let paragraph = Paragraph::new(Text::from(text.to_string()))
+        .block(block.take().unwrap())
+        .wrap(Wrap { trim: false });
+
+    ResourceArc::new(ParagraphResource(paragraph))
+}
+
+struct ChunksResource(Vec<Rect>);
+
+impl Resource for ChunksResource {
+    const IMPLEMENTS_DESTRUCTOR: bool = false;
+    const IMPLEMENTS_DOWN: bool = false;
+}
+
+#[rustler::nif(schedule = "DirtyIo")]
+fn chunks(
+    terminal: ResourceArc<TerminalResource>,
+    constraints: Vec<Constraint>,
+) -> ResourceArc<ChunksResource> {
+    let mut t = terminal.terminal.lock().unwrap();
+
+    let rc_chunks = Layout::default()
+        .constraints(constraints.iter().map(|c| c.0))
+        .direction(Direction::Vertical)
+        .split(t.get_frame().area());
+
+    // stupid stuff to move the chunks from the Rc to an Arc
+    let chunks = {
+        let mut out = Vec::with_capacity(rc_chunks.len());
+
+        for chunk in rc_chunks.iter() {
+            out.push(*chunk)
+        }
+
+        out
+    };
+
+    ResourceArc::new(ChunksResource(chunks))
+}
+
+#[rustler::nif(schedule = "DirtyIo")]
+fn render_paragraph(
+    terminal: ResourceArc<TerminalResource>,
+    text: String,
+    chunks: ResourceArc<ChunksResource>,
+    index: usize,
+) {
+    // let widget = paragraph.0;
+    // let chunk = chunks.0;
+
+    let block = Block::default().borders(Borders::ALL).title(Span::styled(
+        "Info",
+        Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD),
+    ));
+
+    let paragraph = Paragraph::new(Text::from(text))
+        .block(block)
+        .wrap(Wrap { trim: false });
+
+    let mut t = terminal.terminal.lock().unwrap();
+    let mut frame = t.get_frame();
+    frame.render_widget(paragraph, chunks.0[index]);
+}
+
 // #[rustler::nif(schedule = "DirtyIo")]
 fn draw(terminal: ResourceArc<TerminalResource>, s: &str) -> NifResult<rustler::Atom> {
     let constraints = [
-        Constraint::Percentage(60),
-        Constraint::Percentage(20),
-        Constraint::Percentage(10),
+        ratatui::layout::Constraint::Percentage(60),
+        ratatui::layout::Constraint::Percentage(20),
+        ratatui::layout::Constraint::Percentage(10),
     ];
 
     let block = Block::default().borders(Borders::ALL).title(Span::styled(
@@ -385,11 +559,6 @@ fn draw(terminal: ResourceArc<TerminalResource>, s: &str) -> NifResult<rustler::
 
     terminal
         .draw(|frame| {
-            // Layout::default()
-            // .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
-            // .direction(Direction::Horizontal)
-            // .split(f.area())
-
             let chunks = Layout::default()
                 .constraints(constraints)
                 .direction(Direction::Vertical)
@@ -399,6 +568,7 @@ fn draw(terminal: ResourceArc<TerminalResource>, s: &str) -> NifResult<rustler::
                 .block(block)
                 .wrap(Wrap { trim: false });
 
+            // terminal, widget, chunks, index
             frame.render_widget(paragraph, chunks[0]);
         })
         .map_err(|e| nif_error!(e))?;
@@ -406,10 +576,73 @@ fn draw(terminal: ResourceArc<TerminalResource>, s: &str) -> NifResult<rustler::
     Ok(atoms::ok())
 }
 
+#[rustler::nif(schedule = "DirtyIo")]
+fn predraw(terminal: ResourceArc<TerminalResource>) -> NifResult<()> {
+    let mut terminal = terminal.terminal.lock().unwrap();
+    terminal.autoresize().map_err(|e| nif_error!(e))
+}
+
+#[rustler::nif(schedule = "DirtyIo")]
+fn postdraw(terminal: ResourceArc<TerminalResource>) -> NifResult<()> {
+    let mut terminal = terminal.terminal.lock().unwrap();
+
+    // let frame = terminal.get_frame();
+
+    // We can't change the cursor position right away because we have to flush the frame to
+    // stdout first. But we also can't keep the frame around, since it holds a &mut to
+    // Buffer. Thus, we're taking the important data out of the Frame and dropping it.
+    let cursor_position = terminal
+        .backend_mut()
+        .get_cursor_position()
+        .map_err(|e| nif_error!(e));
+
+    // Draw to stdout
+    terminal.flush().map_err(|e| nif_error!(e))?;
+
+    match cursor_position {
+        Err(_) => terminal.hide_cursor().map_err(|e| nif_error!(e))?,
+        Ok(position) => {
+            terminal.show_cursor().map_err(|e| nif_error!(e))?;
+            terminal
+                .set_cursor_position(position)
+                .map_err(|e| nif_error!(e))?;
+        }
+    }
+
+    terminal.swap_buffers();
+
+    // Flush
+    terminal.backend_mut().flush().map_err(|e| nif_error!(e))?;
+
+    // let completed_frame = ratatui::CompletedFrame {
+    //     buffer: &self.buffers[1 - self.current],
+    //     area: self.last_known_area,
+    //     count: self.frame_count,
+    // };
+
+    // // increment frame count before returning from draw
+    // self.frame_count = self.frame_count.wrapping_add(1);
+
+    // Ok(completed_frame)
+    Ok(())
+}
 // #[rustler::nif(schedule = "DirtyIo")]
 // fn clear(terminal: ResourceArc<TerminalResource>) {
 //     let mut terminal = terminal.terminal.lock().unwrap();
 //     terminal.clear().unwrap();
+// }
+
+// #[rustler::nif(schedule = "DirtyIo")]
+// fn resize(terminal: ResourceArc<TerminalResource>, width: u16, height: u16) -> NifResult<()> {
+//     let mut terminal = terminal.terminal.lock().unwrap();
+//     terminal
+//         .resize(Rect {
+//             x: 0,
+//             y: 0,
+//             width,
+//             height,
+//         })
+//         .map_err(|e| nif_error!(e))
 // }
 
 // def autoresize(_terminal), do: :erlang.nif_error(:nif_not_loaded)
@@ -418,14 +651,6 @@ fn autoresize(terminal: ResourceArc<TerminalResource>) -> NifResult<()> {
     let mut terminal = terminal.terminal.lock().unwrap();
     terminal.autoresize().map_err(|e| nif_error!(e))
 }
-// def get_frame(_terminal), do: :erlang.nif_error(:nif_not_loaded)
-// #[rustler::nif(schedule = "DirtyIo")]
-// fn get_frame<'a>(
-//     env: Env<'a>,
-//     terminal: ResourceArc<TerminalResource>,
-// ) -> ResourceArc<FrameResource<'a>> {
-//     todo!()
-// }
 
 // def get_cursor_position(_frame), do: :erlang.nif_error(:nif_not_loaded)
 #[rustler::nif(schedule = "DirtyIo")]
@@ -438,24 +663,28 @@ fn get_cursor_position(terminal: ResourceArc<TerminalResource>) -> NifResult<(u1
 
     Ok((position.x, position.y))
 }
+
 // def flush(_terminal), do: :erlang.nif_error(:nif_not_loaded)
 #[rustler::nif(schedule = "DirtyIo")]
 fn flush(terminal: ResourceArc<TerminalResource>) -> NifResult<()> {
     let mut terminal = terminal.terminal.lock().unwrap();
     terminal.flush().map_err(|e| nif_error!(e))
 }
+
 // def hide_cursor(_terminal), do: :erlang.nif_error(:nif_not_loaded)
 #[rustler::nif(schedule = "DirtyIo")]
 fn hide_cursor(terminal: ResourceArc<TerminalResource>) -> NifResult<()> {
     let mut terminal = terminal.terminal.lock().unwrap();
     terminal.hide_cursor().map_err(|e| nif_error!(e))
 }
+
 // def show_cursor(_terminal), do: :erlang.nif_error(:nif_not_loaded)
 #[rustler::nif(schedule = "DirtyIo")]
 fn show_cursor(terminal: ResourceArc<TerminalResource>) -> NifResult<()> {
     let mut terminal = terminal.terminal.lock().unwrap();
     terminal.show_cursor().map_err(|e| nif_error!(e))
 }
+
 // def set_cursor_position(_terminal, _position), do: :erlang.nif_error(:nif_not_loaded)
 #[rustler::nif(schedule = "DirtyIo")]
 fn set_cursor_position(
@@ -467,12 +696,14 @@ fn set_cursor_position(
         .set_cursor_position(position)
         .map_err(|e| nif_error!(e))
 }
+
 // def swap_buffers(_terminal), do: :erlang.nif_error(:nif_not_loaded)
 #[rustler::nif(schedule = "DirtyIo")]
 fn swap_buffers(terminal: ResourceArc<TerminalResource>) {
     let mut terminal = terminal.terminal.lock().unwrap();
     terminal.swap_buffers();
 }
+
 // def flush_backend(_terminal), do: :erlang.nif_error(:nif_not_loaded)
 #[rustler::nif(schedule = "DirtyIo")]
 fn flush_backend(terminal: ResourceArc<TerminalResource>) -> NifResult<()> {

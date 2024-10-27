@@ -2,7 +2,7 @@ defmodule Terminal.TestServer do
   use GenServer
   require Logger
 
-  defstruct [:terminal, :tick_rate, :last_tick, :app_state]
+  defstruct [:terminal, :tick_rate, :last_tick, :app_state, :chunks, :exit_buf]
 
   def start_link(args) do
     GenServer.start_link(__MODULE__, args, name: __MODULE__)
@@ -10,21 +10,44 @@ defmodule Terminal.TestServer do
 
   @impl GenServer
   def init(_args) do
-    state = %__MODULE__{tick_rate: 100}
+    state = %__MODULE__{tick_rate: 50}
     {:ok, state, {:continue, :start_terminal}}
   end
 
   @impl GenServer
   def handle_continue(:start_terminal, state) do
     Logger.debug("up")
-    {:ok, terminal} = Terminal.new(state.tick_rate, :active)
+    {:ok, terminal} = Terminal.new(state.tick_rate, :passive)
     last_tick = DateTime.utc_now()
 
-    # Process.send(self(), :poll, [])
+    Process.send(self(), :poll, [])
+
+    constraints = [
+      {:percentage, 60},
+      {:percentage, 20},
+      {:percentage, 10}
+    ]
+
+    chunks = Terminal.chunks(terminal, constraints)
+
+    state = %__MODULE__{
+      state
+      | terminal: terminal,
+        last_tick: last_tick,
+        app_state: "",
+        chunks: chunks,
+        exit_buf: []
+    }
+
+    Terminal.draw(state.terminal, fn _terminal ->
+      Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 0)
+      Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 1)
+      Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 2)
+    end)
 
     {
       :noreply,
-      %{state | terminal: terminal, last_tick: last_tick, app_state: ""}
+      state
     }
   end
 
@@ -37,34 +60,107 @@ defmodule Terminal.TestServer do
       with {_, {:ok, true}} <- {:event_available?, Terminal.event_available?(tick_time)},
            {_, {:ok, {:event, event}}} <- {:read_event, Terminal.read_event()} do
         case event do
-          %{"code" => {:keycode, {:char, "c"}}, "modifiers" => "Control"} ->
-            Terminal.draw(state.terminal, "Got control C, quitting!")
-            Process.sleep(1000)
+          %{code: {:keycode, {:char, "c"}}, modifiers: :control} ->
+            # state = %__MODULE__{app_state: "got Ctrl-C, quitting..."}
+
+            Terminal.draw(state.terminal, fn terminal ->
+              Terminal.render_paragraph(terminal, state.app_state, state.chunks, 0)
+            end)
+
             System.stop(0)
 
-          %{"code" => {:keycode, {:char, c}}} ->
-            state = %{
-              state
-              | app_state:
-                  state.app_state <> "\nyou pressed #{c}, tick_time: #{tick_time}, elapsed: #{e}"
-            }
+            Logger.debug("#{inspect(state.exit_buf)}")
 
-            Terminal.draw(state.terminal, state.app_state)
+            # Process.sleep(:infinity)
 
             state
 
-          _ ->
+          %{code: {:keycode, :backspace}} ->
+            state = %__MODULE__{
+              state
+              | app_state: String.slice(state.app_state, 0..-2//1)
+            }
+
+            Terminal.draw(state.terminal, fn _terminal ->
+              Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 0)
+              Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 1)
+              Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 2)
+            end)
+
+            state
+
+          %{code: {:keycode, :enter}} ->
+            state = %__MODULE__{
+              state
+              | app_state: "#{state.app_state}\n"
+            }
+
+            Terminal.draw(state.terminal, fn _terminal ->
+              Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 0)
+              Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 1)
+              Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 2)
+            end)
+
+            state
+
+          %{code: {:keycode, {:char, c}}} ->
+            state = %__MODULE__{
+              state
+              | app_state: "#{state.app_state}#{c}"
+            }
+
+            Terminal.draw(state.terminal, fn _terminal ->
+              Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 0)
+              Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 1)
+              Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 2)
+            end)
+
+            state
+
+          {:resize, _width, _height} ->
+            # Terminal.autoresize(state.terminal)
+
+            # state = %__MODULE__{state | exit_buf: ["autoresized to #{x} #{y}" | state.exit_buf]}
+
+            Terminal.autoresize(state.terminal)
+
+            Terminal.draw(state.terminal, fn _terminal ->
+              Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 0)
+              Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 1)
+              Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 2)
+            end)
+
+            state
+
+          # catchall for keycodes not yet handled
+          %{code: {:keycode, _}} ->
+            Terminal.draw(state.terminal, fn _terminal ->
+              Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 0)
+              Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 1)
+              Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 2)
+            end)
+
             state
         end
       else
-        _e ->
-          Terminal.draw(state.terminal, state.app_state)
+        {:event_available?, {:ok, false}} ->
+          state
+
+        e ->
+          state = %__MODULE__{state | exit_buf: [e | state.exit_buf]}
+
+          Terminal.draw(state.terminal, fn _terminal ->
+            Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 0)
+            Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 1)
+            Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 2)
+          end)
+
           state
       end
 
     state =
       if elapsed(state.last_tick) >= state.tick_rate do
-        %{state | last_tick: DateTime.utc_now()}
+        %__MODULE__{state | last_tick: DateTime.utc_now()}
       else
         state
       end
@@ -79,21 +175,38 @@ defmodule Terminal.TestServer do
     state =
       case event do
         :tick ->
-          Terminal.draw(state.terminal, state.app_state)
+          Terminal.draw(state.terminal, fn _terminal ->
+            Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 0)
+          end)
+
           state
 
         %{code: {:keycode, {:char, "c"}}, modifiers: "Control"} ->
-          Terminal.draw(state.terminal, "Got control C, quitting!")
-          Process.sleep(1000)
+          # state = %__MODULE__{app_state: "got Ctrl-C, quitting..."}
+
+          # Terminal.draw(state.terminal, fn terminal ->
+          #   Terminal.render_paragraph(terminal, state.app_state, state.chunks, 0)
+          # end)
+
           System.stop(0)
 
+          Process.sleep(:infinity)
+
+          state
+
         %{code: {:keycode, {:char, c}}} ->
-          state = %{
+          state = %__MODULE__{
             state
-            | app_state: state.app_state <> "\nyou pressed #{c}"
+            | app_state: "you pressed #{c}"
           }
 
-          Terminal.draw(state.terminal, state.app_state)
+          # Terminal.draw(state.terminal, state.app_state)
+          # block =
+          #   Terminal.new_block() |> Terminal.block_borders() |> Terminal.block_title("SOME TITLE")
+
+          Terminal.draw(state.terminal, fn _terminal ->
+            Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 0)
+          end)
 
           state
 
@@ -102,6 +215,10 @@ defmodule Terminal.TestServer do
       end
 
     {:noreply, state}
+  end
+
+  def handle_info(m, state) do
+    raise m
   end
 
   def elapsed(datetime) do
