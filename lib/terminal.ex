@@ -26,6 +26,9 @@ defmodule Terminal do
   def render_paragraph(_terminal, _text, _chunks, _chunk_index),
     do: :erlang.nif_error(:nif_not_loaded)
 
+  def lock_terminal_with_callback(_terminal, _f, _args), do: :erlang.nif_error(:nif_not_loaded)
+  def complete_future(_future, _result), do: :erlang.nif_error(:nif_not_loaded)
+
   # def resize(_terminal, _width, _height), do: :erlang.nif_error(:nif_not_loaded)
 
   # terminal: ResourceArc<TerminalResource>,
