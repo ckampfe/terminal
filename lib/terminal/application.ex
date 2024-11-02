@@ -10,8 +10,10 @@ defmodule Terminal.Application do
     children = [
       # Starts a worker by calling: Terminal.Worker.start_link(arg)
       # {Terminal.Worker, arg}
-      {Terminal.CallbackServer, []}
+      # {Terminal.CallbackServer, []}
       # {Terminal.TestServer, []}
+      {Task.Supervisor, name: T2.TaskSupervisor},
+      {Terminal.T2, []}
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html

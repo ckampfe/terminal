@@ -2,6 +2,8 @@ defmodule Terminal.TestServer do
   use GenServer
   require Logger
 
+  alias Terminal.{Chunks, Paragraph}
+
   defstruct [:terminal, :tick_rate, :last_tick, :app_state, :chunks, :exit_buf]
 
   def start_link(args) do
@@ -28,7 +30,7 @@ defmodule Terminal.TestServer do
       {:percentage, 10}
     ]
 
-    chunks = Terminal.chunks(terminal, constraints)
+    chunks = Chunks.new(terminal, constraints)
 
     state = %__MODULE__{
       state
@@ -40,9 +42,9 @@ defmodule Terminal.TestServer do
     }
 
     Terminal.draw(state.terminal, fn _terminal ->
-      Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 0)
-      Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 1)
-      Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 2)
+      Paragraph.render(state.terminal, state.app_state, state.chunks, 0)
+      Paragraph.render(state.terminal, state.app_state, state.chunks, 1)
+      Paragraph.render(state.terminal, state.app_state, state.chunks, 2)
     end)
 
     {
@@ -64,7 +66,7 @@ defmodule Terminal.TestServer do
             # state = %__MODULE__{app_state: "got Ctrl-C, quitting..."}
 
             Terminal.draw(state.terminal, fn terminal ->
-              Terminal.render_paragraph(terminal, state.app_state, state.chunks, 0)
+              Paragraph.render(terminal, state.app_state, state.chunks, 0)
             end)
 
             System.stop(0)
@@ -82,9 +84,9 @@ defmodule Terminal.TestServer do
             }
 
             Terminal.draw(state.terminal, fn _terminal ->
-              Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 0)
-              Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 1)
-              Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 2)
+              Paragraph.render(state.terminal, state.app_state, state.chunks, 0)
+              Paragraph.render(state.terminal, state.app_state, state.chunks, 1)
+              Paragraph.render(state.terminal, state.app_state, state.chunks, 2)
             end)
 
             state
@@ -96,9 +98,9 @@ defmodule Terminal.TestServer do
             }
 
             Terminal.draw(state.terminal, fn _terminal ->
-              Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 0)
-              Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 1)
-              Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 2)
+              Paragraph.render(state.terminal, state.app_state, state.chunks, 0)
+              Paragraph.render(state.terminal, state.app_state, state.chunks, 1)
+              Paragraph.render(state.terminal, state.app_state, state.chunks, 2)
             end)
 
             state
@@ -110,9 +112,9 @@ defmodule Terminal.TestServer do
             }
 
             Terminal.draw(state.terminal, fn _terminal ->
-              Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 0)
-              Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 1)
-              Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 2)
+              Paragraph.render(state.terminal, state.app_state, state.chunks, 0)
+              Paragraph.render(state.terminal, state.app_state, state.chunks, 1)
+              Paragraph.render(state.terminal, state.app_state, state.chunks, 2)
             end)
 
             state
@@ -125,9 +127,9 @@ defmodule Terminal.TestServer do
             Terminal.autoresize(state.terminal)
 
             Terminal.draw(state.terminal, fn _terminal ->
-              Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 0)
-              Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 1)
-              Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 2)
+              Paragraph.render(state.terminal, state.app_state, state.chunks, 0)
+              Paragraph.render(state.terminal, state.app_state, state.chunks, 1)
+              Paragraph.render(state.terminal, state.app_state, state.chunks, 2)
             end)
 
             state
@@ -135,9 +137,9 @@ defmodule Terminal.TestServer do
           # catchall for keycodes not yet handled
           %{code: {:keycode, _}} ->
             Terminal.draw(state.terminal, fn _terminal ->
-              Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 0)
-              Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 1)
-              Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 2)
+              Paragraph.render(state.terminal, state.app_state, state.chunks, 0)
+              Paragraph.render(state.terminal, state.app_state, state.chunks, 1)
+              Paragraph.render(state.terminal, state.app_state, state.chunks, 2)
             end)
 
             state
@@ -150,9 +152,9 @@ defmodule Terminal.TestServer do
           state = %__MODULE__{state | exit_buf: [e | state.exit_buf]}
 
           Terminal.draw(state.terminal, fn _terminal ->
-            Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 0)
-            Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 1)
-            Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 2)
+            Paragraph.render(state.terminal, state.app_state, state.chunks, 0)
+            Paragraph.render(state.terminal, state.app_state, state.chunks, 1)
+            Paragraph.render(state.terminal, state.app_state, state.chunks, 2)
           end)
 
           state
@@ -176,7 +178,7 @@ defmodule Terminal.TestServer do
       case event do
         :tick ->
           Terminal.draw(state.terminal, fn _terminal ->
-            Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 0)
+            Paragraph.render(state.terminal, state.app_state, state.chunks, 0)
           end)
 
           state
@@ -185,7 +187,7 @@ defmodule Terminal.TestServer do
           # state = %__MODULE__{app_state: "got Ctrl-C, quitting..."}
 
           # Terminal.draw(state.terminal, fn terminal ->
-          #   Terminal.render_paragraph(terminal, state.app_state, state.chunks, 0)
+          #   Paragraph.render(terminal, state.app_state, state.chunks, 0)
           # end)
 
           System.stop(0)
@@ -205,7 +207,7 @@ defmodule Terminal.TestServer do
           #   Terminal.new_block() |> Terminal.block_borders() |> Terminal.block_title("SOME TITLE")
 
           Terminal.draw(state.terminal, fn _terminal ->
-            Terminal.render_paragraph(state.terminal, state.app_state, state.chunks, 0)
+            Paragraph.render(state.terminal, state.app_state, state.chunks, 0)
           end)
 
           state
